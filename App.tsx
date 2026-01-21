@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Pixel, ConfettiParticle, VacuumState, GameState, Upgrades, AnnouncementState } from './types';
 import { 
@@ -19,7 +18,7 @@ import {
 } from './constants';
 import HUD from './components/HUD';
 
-const STORAGE_KEY = 'pixel_vacuum_save_v2'; // Bumped version for fresh state
+const STORAGE_KEY = 'pixel_vacuum_save_v3';
 
 const MOTIVATIONAL_PHRASES = [
   "Вау!", "Чистота!", "Мастер порядка!", "Безупречно!", "Ни пылинки!",
@@ -44,41 +43,29 @@ const App: React.FC = () => {
   const pixelsRef = useRef<Pixel[]>([]);
   const confettiRef = useRef<ConfettiParticle[]>([]);
   const vacuumRef = useRef<VacuumState>({ active: false, x: 0, y: 0 });
-  const animationFrameRef = useRef<number>(undefined);
-  const lastTimeRef = useRef<number>(performance.now());
+  // Fix: animationFrameRef needs an initial value to satisfy TypeScript's useRef definition
+  const animationFrameRef = useRef<number | undefined>(undefined);
 
-  // Initialization & Persistence
+  // Initialization
   useEffect(() => {
-    // 1. Telegram WebApp Ready
-    const tg = (window as any).Telegram?.WebApp;
-    if (tg) {
-      tg.ready();
-      tg.expand();
-      if (tg.disableVerticalSwiping) {
-        tg.disableVerticalSwiping();
-      }
-      if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
-      if (tg.enableClosingConfirmation) tg.enableClosingConfirmation();
-    }
-
-    // 2. Load Save
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
+    // Basic state restoration
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
         const data: GameState = JSON.parse(saved);
         setLevel(data.level || 1);
         setCoins(data.coins || 0);
         setUpgrades(data.upgrades || { power: 0, size: 0 });
         setTurboCost(data.turboCost || TURBO_INITIAL_COST);
-      } catch (e) {
-        console.error("Failed to load save", e);
       }
+    } catch (e) {
+      console.warn("Save load failed", e);
     }
-
+    
     setIsReady(true);
   }, []);
 
-  // Save loop
+  // Persistence
   useEffect(() => {
     if (isReady) {
       const data: GameState = { level, coins, upgrades, turboCost };
@@ -86,7 +73,7 @@ const App: React.FC = () => {
     }
   }, [level, coins, upgrades, turboCost, isReady]);
 
-  // Turbo Countdown
+  // Turbo countdown
   useEffect(() => {
     if (turboTimeLeft > 0) {
       const timer = setInterval(() => {
@@ -98,14 +85,11 @@ const App: React.FC = () => {
 
   const createPixel = (id: number, width: number, height: number, currentLevel: number): Pixel => {
     const isHeavy = currentLevel >= 10 && Math.random() < 0.2;
-    let colorData;
-    if (isHeavy) {
-      colorData = { color: HEAVY_PIXEL_COLOR, glow: 'rgba(168, 85, 247, 0.6)' };
-    } else {
-      colorData = NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
-    }
+    const colorData = isHeavy 
+      ? { color: HEAVY_PIXEL_COLOR, glow: 'rgba(168, 85, 247, 0.6)' } 
+      : NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
 
-    const padding = 30;
+    const padding = 40;
     const safeWidth = Math.max(width - padding * 2, 20);
     const safeHeight = Math.max(height - padding * 2, 20);
 
@@ -113,33 +97,29 @@ const App: React.FC = () => {
       id,
       x: padding + Math.random() * safeWidth,
       y: padding + Math.random() * safeHeight,
-      vx: (Math.random() - 0.5) * 2,
-      vy: (Math.random() - 0.5) * 2,
-      size: isHeavy ? (Math.random() * 2 + 5) : (Math.random() * 3 + 2.5),
+      vx: (Math.random() - 0.5) * 1.5,
+      vy: (Math.random() - 0.5) * 1.5,
+      size: isHeavy ? (Math.random() * 2 + 5) : (Math.random() * 2 + 2),
       color: colorData.color,
       glow: colorData.glow,
-      opacity: 0.6 + Math.random() * 0.4,
+      opacity: 0.7 + Math.random() * 0.3,
       isHeavy
     };
   };
 
   const createConfetti = (x: number, y: number) => {
     const particles: ConfettiParticle[] = [];
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 40; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = Math.random() * 10 + 5;
-      const life = Math.random() * 60 + 40;
+      const speed = Math.random() * 8 + 4;
+      const life = Math.random() * 50 + 30;
       particles.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
+        x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
         color: NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)].color,
-        size: Math.random() * 4 + 2,
-        life: life,
-        maxLife: life,
+        size: Math.random() * 3 + 2,
+        life: life, maxLife: life,
         rotation: Math.random() * Math.PI * 2,
-        rotationSpeed: (Math.random() - 0.5) * 0.2
+        rotationSpeed: (Math.random() - 0.5) * 0.15
       });
     }
     confettiRef.current = [...confettiRef.current, ...particles];
@@ -149,7 +129,7 @@ const App: React.FC = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
-    const count = Math.floor(INITIAL_PIXEL_COUNT * Math.pow(1.2, level - 1));
+    const count = Math.floor(INITIAL_PIXEL_COUNT * Math.pow(1.15, level - 1));
     const width = canvas.width;
     const height = canvas.height;
 
@@ -164,10 +144,9 @@ const App: React.FC = () => {
     pixelsRef.current = newPixels;
     setScore(0);
     setTotalPixels(count);
-    setMotivation(level === 10 ? "Внимание: Тяжелые пиксели!" : `Уровень ${level} начался!`);
-    
+    setMotivation(level === 10 ? "Тяжелые пиксели!" : `Уровень ${level}`);
     setFlash(true);
-    setTimeout(() => setFlash(false), 300);
+    setTimeout(() => setFlash(false), 200);
   }, [level]);
 
   useEffect(() => {
@@ -177,26 +156,25 @@ const App: React.FC = () => {
         if (canvas) {
           canvas.width = window.innerWidth;
           canvas.height = window.innerHeight;
-          
+          // Reposition if somehow lost
           pixelsRef.current.forEach(p => {
-            if (p.x < 0) p.x = 10;
-            if (p.x > canvas.width) p.x = canvas.width - 10;
-            if (p.y < 0) p.y = 10;
-            if (p.y > canvas.height) p.y = canvas.height - 10;
+            if (p.x < 0) p.x = 20;
+            if (p.x > canvas.width) p.x = canvas.width - 20;
+            if (p.y < 0) p.y = 20;
+            if (p.y > canvas.height) p.y = canvas.height - 20;
           });
         }
       };
+      window.addEventListener('resize', handleResize);
       handleResize();
       spawnLevel();
-      window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
     }
   }, [isReady, spawnLevel]);
 
   const powerCost = Math.floor(UPGRADE_BASE_COST * Math.pow(UPGRADE_COST_MULTIPLIER, upgrades.power));
   const sizeCost = Math.floor(UPGRADE_BASE_COST * Math.pow(UPGRADE_COST_MULTIPLIER, upgrades.size));
-
-  const getVacuumRadius = () => BASE_VACUUM_RADIUS + (upgrades.size * 20);
+  const getVacuumRadius = () => BASE_VACUUM_RADIUS + (upgrades.size * 15);
   const isSizeMaxed = canvasRef.current ? (getVacuumRadius() >= canvasRef.current.width * MAX_SIZE_SCREEN_RATIO) : false;
 
   const handleUpgradePower = () => {
@@ -218,15 +196,10 @@ const App: React.FC = () => {
       setCoins(c => c - turboCost);
       setTurboCost(prev => prev + TURBO_COST_STEP);
       setTurboTimeLeft(TURBO_DURATION_MS / 1000);
-      setMotivation("⚡️ SUPER POWER АКТИВИРОВАН! ⚡️");
-      
+      setMotivation("⚡️ TURBO ⚡️");
       const tg = (window as any).Telegram?.WebApp;
       if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     }
-  };
-
-  const handleForceReset = () => {
-    spawnLevel();
   };
 
   useEffect(() => {
@@ -236,39 +209,36 @@ const App: React.FC = () => {
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    let isTransitioning = false;
+    let transitioning = false;
 
-    const update = (now: number) => {
+    const gameLoop = (time: number) => {
+      const width = canvas.width;
+      const height = canvas.height;
       const vacuum = vacuumRef.current;
-      const pixels = pixelsRef.current;
       const isTurbo = turboTimeLeft > 0;
+      
+      // Update
       const nextPixels: Pixel[] = [];
-      let sucked = 0;
+      let suckedCount = 0;
+      for (let i = 0; i < pixelsRef.current.length; i++) {
+        const p = pixelsRef.current[i];
+        p.x += p.vx; p.y += p.vy;
+        p.vx *= FRICTION; p.vy *= FRICTION;
 
-      for (let i = 0; i < pixels.length; i++) {
-        const p = pixels[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vx *= FRICTION;
-        p.vy *= FRICTION;
-
-        const isOutside = p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height;
-        
-        if (isOutside) {
-          if (!p.outsideSince) {
-            p.outsideSince = now;
-          } else if (now - p.outsideSince > 1000) {
-            p.x = canvas.width / 2 + (Math.random() - 0.5) * 50;
-            p.y = canvas.height / 2 + (Math.random() - 0.5) * 50;
-            p.vx = 0;
-            p.vy = 0;
+        // Teleport check for invisible pixels
+        const outside = p.x < 0 || p.x > width || p.y < 0 || p.y > height;
+        if (outside) {
+          if (!p.outsideSince) p.outsideSince = time;
+          else if (time - p.outsideSince > 1000) {
+            p.x = width / 2; p.y = height / 2;
+            p.vx = 0; p.vy = 0;
             p.outsideSince = undefined;
           }
-          
+          // Immediate wall bounce
           if (p.x < 0) { p.x = 0; p.vx = Math.abs(p.vx); }
-          if (p.x > canvas.width) { p.x = canvas.width; p.vx = -Math.abs(p.vx); }
+          if (p.x > width) { p.x = width; p.vx = -Math.abs(p.vx); }
           if (p.y < 0) { p.y = 0; p.vy = Math.abs(p.vy); }
-          if (p.y > canvas.height) { p.y = canvas.height; p.vy = -Math.abs(p.vy); }
+          if (p.y > height) { p.y = height; p.vy = -Math.abs(p.vy); }
         } else {
           p.outsideSince = undefined;
         }
@@ -276,151 +246,85 @@ const App: React.FC = () => {
         if (vacuum.active) {
           const dx = vacuum.x - p.x;
           const dy = vacuum.y - p.y;
-          const distSq = dx * dx + dy * dy;
-          const dist = Math.sqrt(distSq);
-
-          const currentRadius = getVacuumRadius();
-          let currentPower = BASE_ATTRACTION_FORCE + (upgrades.power * 0.4);
+          const d2 = dx*dx + dy*dy;
+          const dist = Math.sqrt(d2);
+          const rad = getVacuumRadius();
           
-          if (isTurbo) {
-            currentPower *= TURBO_MULTIPLIER;
-          }
-
           if (dist < SUCK_RADIUS) {
-            sucked++;
+            suckedCount++;
             continue;
-          } else if (dist < currentRadius) {
-            const weightMultiplier = p.isHeavy ? 0.33 : 1;
-            const force = (1 - dist / currentRadius) * currentPower * manualPower * weightMultiplier;
+          } else if (dist < rad) {
+            const power = (BASE_ATTRACTION_FORCE + upgrades.power * 0.3) * manualPower * (isTurbo ? TURBO_MULTIPLIER : 1);
+            const force = (1 - dist / rad) * power * (p.isHeavy ? 0.4 : 1);
             p.vx += (dx / dist) * force;
             p.vy += (dy / dist) * force;
-            
-            if (isTurbo) {
-              p.x += (Math.random() - 0.5) * 1.5;
-              p.y += (Math.random() - 0.5) * 1.5;
-            }
           }
         }
         nextPixels.push(p);
       }
+      pixelsRef.current = nextPixels;
 
       const nextConfetti: ConfettiParticle[] = [];
-      for (let i = 0; i < confettiRef.current.length; i++) {
-        const c = confettiRef.current[i];
-        c.x += c.vx;
-        c.y += c.vy;
-        c.vy += 0.25;
-        c.vx *= 0.98;
-        c.rotation += c.rotationSpeed;
+      for (const c of confettiRef.current) {
+        c.x += c.vx; c.y += c.vy; c.vy += 0.2; c.vx *= 0.98;
         c.life--;
         if (c.life > 0) nextConfetti.push(c);
       }
       confettiRef.current = nextConfetti;
 
-      if (sucked > 0) {
-        setScore(prev => prev + sucked);
-        setCoins(c => c + sucked);
+      if (suckedCount > 0) {
+        setScore(s => s + suckedCount);
+        setCoins(c => c + suckedCount);
         const tg = (window as any).Telegram?.WebApp;
-        if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred(isTurbo ? 'medium' : 'light');
-        
-        if (Math.random() > 0.98) {
-          setMotivation(MOTIVATIONAL_PHRASES[Math.floor(Math.random() * MOTIVATIONAL_PHRASES.length)]);
-        }
+        if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
       }
 
-      pixelsRef.current = nextPixels;
-      if (nextPixels.length === 0 && !isTransitioning) {
-        isTransitioning = true;
-        setLevel(prev => prev + 1);
+      if (nextPixels.length === 0 && !transitioning) {
+        transitioning = true;
+        setLevel(l => l + 1);
       }
-    };
 
-    const draw = () => {
+      // Draw
       ctx.fillStyle = '#0f172a';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, width, height);
 
-      const pixels = pixelsRef.current;
-      const confetti = confettiRef.current;
-      const vacuum = vacuumRef.current;
-      const isTurbo = turboTimeLeft > 0;
-      const currentRadius = getVacuumRadius();
-
-      for (let i = 0; i < confetti.length; i++) {
-        const c = confetti[i];
+      for (const c of confettiRef.current) {
         ctx.globalAlpha = c.life / c.maxLife;
         ctx.fillStyle = c.color;
-        ctx.save();
-        ctx.translate(c.x, c.y);
-        ctx.rotate(c.rotation);
-        ctx.fillRect(-c.size / 2, -c.size / 2, c.size, c.size);
-        ctx.restore();
+        ctx.fillRect(c.x, c.y, c.size, c.size);
       }
 
-      const isEnding = pixels.length <= 5;
-      for (let i = 0; i < pixels.length; i++) {
-        const p = pixels[i];
+      const isEnd = pixelsRef.current.length <= 5;
+      for (const p of pixelsRef.current) {
         ctx.globalAlpha = p.opacity;
         ctx.fillStyle = p.color;
-        
-        let drawSize = p.size;
-        if (isEnding) {
-          const pulse = (Math.sin(Date.now() / 150) + 1) / 2;
-          ctx.shadowBlur = 15 + pulse * 15;
-          ctx.shadowColor = p.color;
-          drawSize = p.size * 2.5;
-        } else {
-          ctx.shadowBlur = 0;
+        let sz = p.size;
+        if (isEnd) {
+          ctx.shadowBlur = 10; ctx.shadowColor = p.color;
+          sz *= 2;
         }
-
-        if (p.isHeavy) {
-          ctx.strokeStyle = 'white';
-          ctx.lineWidth = 0.5;
-          ctx.strokeRect(p.x - drawSize/2, p.y - drawSize/2, drawSize, drawSize);
-        }
-        ctx.fillRect(p.x - drawSize/2, p.y - drawSize/2, drawSize, drawSize);
+        ctx.fillRect(p.x - sz/2, p.y - sz/2, sz, sz);
         ctx.shadowBlur = 0;
       }
 
       if (vacuum.active) {
         ctx.globalAlpha = 1;
         ctx.beginPath();
-        ctx.arc(vacuum.x, vacuum.y, currentRadius, 0, Math.PI * 2);
-        
-        if (isTurbo) {
-          const pulse = (Math.sin(Date.now() / 100) + 1) / 2;
-          ctx.strokeStyle = `rgba(255, 120, 0, ${0.4 + pulse * 0.4})`;
-          ctx.lineWidth = 4 + pulse * 4;
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = '#ff7800';
-        } else {
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-          ctx.lineWidth = 2;
-          ctx.shadowBlur = 0;
-        }
+        ctx.arc(vacuum.x, vacuum.y, getVacuumRadius(), 0, Math.PI * 2);
+        ctx.strokeStyle = isTurbo ? '#f97316' : 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = isTurbo ? 3 : 1;
         ctx.stroke();
-        
-        ctx.beginPath();
-        ctx.arc(vacuum.x, vacuum.y, SUCK_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = isTurbo ? 'rgba(255, 120, 0, 0.2)' : 'rgba(255, 255, 255, 0.1)';
-        ctx.fill();
-        ctx.shadowBlur = 0;
       }
       ctx.globalAlpha = 1;
+
+      animationFrameRef.current = requestAnimationFrame(gameLoop);
     };
 
-    const loop = (time: number) => {
-      lastTimeRef.current = time;
-      update(time);
-      draw();
-      animationFrameRef.current = requestAnimationFrame(loop);
-    };
-
-    animationFrameRef.current = requestAnimationFrame(loop);
+    animationFrameRef.current = requestAnimationFrame(gameLoop);
     return () => { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); };
-  }, [isReady, manualPower, upgrades, level, turboTimeLeft]);
+  }, [isReady, upgrades, manualPower, level, turboTimeLeft]);
 
   const handlePointer = (e: React.PointerEvent) => {
-    // 6. Handle pointer events but prevent default browser behavior
     if (e.type === 'pointerup' || e.type === 'pointerleave' || e.type === 'pointercancel') {
       vacuumRef.current.active = false;
     } else {
@@ -429,45 +333,23 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`relative w-full h-screen overflow-hidden select-none touch-none transition-colors duration-300 ${flash ? 'bg-cyan-900' : 'bg-slate-900'}`}>
-      <canvas
-        ref={canvasRef}
-        onPointerMove={handlePointer}
-        onPointerDown={handlePointer}
-        onPointerUp={handlePointer}
-        onPointerLeave={handlePointer}
-        onPointerCancel={handlePointer}
-        className="w-full h-full cursor-none"
-      />
+    <div className={`relative w-full h-full overflow-hidden transition-colors ${flash ? 'bg-cyan-950' : 'bg-slate-950'}`}>
+      <canvas ref={canvasRef} onPointerDown={handlePointer} onPointerMove={handlePointer} onPointerUp={handlePointer} onPointerLeave={handlePointer} />
       
       {announcement.show && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
-          <h2 className="text-7xl font-black text-white italic tracking-tighter uppercase drop-shadow-[0_0_30px_rgba(255,255,255,0.7)] animate-in fade-in zoom-in slide-in-from-bottom-12 duration-700">
-            Level {announcement.level}
-          </h2>
+          <h2 className="text-6xl font-black text-white italic uppercase animate-pulse">Level {announcement.level}</h2>
         </div>
       )}
 
       <HUD 
-        score={score} 
-        total={totalPixels} 
-        coins={coins}
-        level={level}
-        message={motivation}
-        powerUpgradeCost={powerCost}
-        sizeUpgradeCost={sizeCost}
-        turboCost={turboCost}
-        turboTimeLeft={turboTimeLeft}
-        manualPower={manualPower}
-        onUpgradePower={handleUpgradePower}
-        onUpgradeSize={handleUpgradeSize}
-        onActivateTurbo={handleActivateTurbo}
-        onManualPowerChange={setManualPower}
-        onForceReset={handleForceReset}
-        isSizeMaxed={isSizeMaxed}
+        score={score} total={totalPixels} coins={coins} level={level} message={motivation}
+        powerUpgradeCost={powerCost} sizeUpgradeCost={sizeCost} turboCost={turboCost}
+        turboTimeLeft={turboTimeLeft} manualPower={manualPower}
+        onUpgradePower={handleUpgradePower} onUpgradeSize={handleUpgradeSize}
+        onActivateTurbo={handleActivateTurbo} onManualPowerChange={setManualPower}
+        onForceReset={spawnLevel} isSizeMaxed={isSizeMaxed}
       />
-      
-      {flash && <div className="absolute inset-0 bg-white/20 pointer-events-none z-50 animate-pulse" />}
     </div>
   );
 };
