@@ -17,19 +17,21 @@ const App: React.FC = () => {
   const [score, setScore] = useState(0);
   const [totalPixels, setTotalPixels] = useState(INITIAL_PIXEL_COUNT);
   const [motivation, setMotivation] = useState("");
+  const [isReady, setIsReady] = useState(false);
   
-  // Game state held in refs for performance (avoiding re-renders on every frame)
   const pixelsRef = useRef<Pixel[]>([]);
   const vacuumRef = useRef<VacuumState>({ active: false, x: 0, y: 0 });
   const animationFrameRef = useRef<number>(undefined);
 
-  // Initialize Telegram WebApp
+  // Инициализация Telegram
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp;
     if (tg) {
       tg.ready();
       tg.expand();
+      if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
     }
+    setIsReady(true);
   }, []);
 
   const createPixel = (id: number, width: number, height: number): Pixel => {
@@ -38,12 +40,12 @@ const App: React.FC = () => {
       id,
       x: Math.random() * width,
       y: Math.random() * height,
-      vx: (Math.random() - 0.5) * 2,
-      vy: (Math.random() - 0.5) * 2,
-      size: Math.random() * 4 + 4,
+      vx: (Math.random() - 0.5) * 3,
+      vy: (Math.random() - 0.5) * 3,
+      size: Math.random() * 3 + 3,
       color: NEON_COLORS[colorIdx].color,
       glow: NEON_COLORS[colorIdx].glow,
-      opacity: 0.8 + Math.random() * 0.2
+      opacity: 0.7 + Math.random() * 0.3
     };
   };
 
@@ -63,19 +65,22 @@ const App: React.FC = () => {
     pixelsRef.current = newPixels;
     setScore(0);
     setTotalPixels(INITIAL_PIXEL_COUNT);
-    setMotivation("Двигайте пальцем, чтобы убраться");
+    setMotivation("Двигайте пальцем для уборки");
   }, []);
 
   useEffect(() => {
-    initGame();
-    window.addEventListener('resize', initGame);
-    return () => window.removeEventListener('resize', initGame);
-  }, [initGame]);
+    if (isReady) {
+      initGame();
+      window.addEventListener('resize', initGame);
+      return () => window.removeEventListener('resize', initGame);
+    }
+  }, [isReady, initGame]);
 
-  // Fetch motivation when a milestone is reached
   useEffect(() => {
     if (score > 0 && score % 25 === 0) {
-      getCleanupMessage(score).then(setMotivation);
+      getCleanupMessage(score).then(msg => {
+        if (msg) setMotivation(msg);
+      }).catch(() => setMotivation("Отличная работа!"));
     }
     if (score === totalPixels && totalPixels > 0) {
       setMotivation("Идеальная чистота!");
@@ -83,9 +88,11 @@ const App: React.FC = () => {
   }, [score, totalPixels]);
 
   useEffect(() => {
+    if (!isReady) return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
     const update = () => {
@@ -97,27 +104,28 @@ const App: React.FC = () => {
       for (let i = 0; i < pixels.length; i++) {
         const p = pixels[i];
         
-        // Default movement
         p.x += p.vx;
         p.y += p.vy;
         p.vx *= FRICTION;
         p.vy *= FRICTION;
 
-        // Bounce off walls
-        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+        // Отскоки от границ
+        if (p.x < 0) { p.x = 0; p.vx *= -1; }
+        if (p.x > canvas.width) { p.x = canvas.width; p.vx *= -1; }
+        if (p.y < 0) { p.y = 0; p.vy *= -1; }
+        if (p.y > canvas.height) { p.y = canvas.height; p.vy *= -1; }
 
         if (vacuum.active) {
           const dx = vacuum.x - p.x;
           const dy = vacuum.y - p.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
+          const distSq = dx * dx + dy * dy;
+          const dist = Math.sqrt(distSq);
 
           if (dist < SUCK_RADIUS) {
-            // Pixel sucked in!
             suckedCount++;
-            continue; // Skip adding to nextPixels
+            continue;
           } else if (dist < VACUUM_RADIUS) {
-            // Apply attraction (ATTRACTION_FORCE is now 1.0)
+            // Усиленная всасывающая сила
             const force = (1 - dist / VACUUM_RADIUS) * ATTRACTION_FORCE;
             p.vx += (dx / dist) * force;
             p.vy += (dy / dist) * force;
@@ -129,8 +137,6 @@ const App: React.FC = () => {
 
       if (suckedCount > 0) {
         setScore(prev => prev + suckedCount);
-        
-        // Trigger Haptic Feedback via Telegram Web App
         const tg = (window as any).Telegram?.WebApp;
         if (tg?.HapticFeedback) {
           tg.HapticFeedback.impactOccurred('light');
@@ -146,32 +152,21 @@ const App: React.FC = () => {
       const pixels = pixelsRef.current;
       const vacuum = vacuumRef.current;
 
-      // Draw Vacuum Ring
+      // Отрисовка зоны вакуума
       if (vacuum.active) {
         ctx.beginPath();
         ctx.arc(vacuum.x, vacuum.y, VACUUM_RADIUS, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
         ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(vacuum.x, vacuum.y, SUCK_RADIUS * 2, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.fill();
       }
 
-      // Draw Pixels
-      for (const p of pixels) {
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = p.glow;
+      // Отрисовка пикселей (без тяжелых теней для производительности)
+      for (let i = 0; i < pixels.length; i++) {
+        const p = pixels[i];
         ctx.fillStyle = p.color;
         ctx.globalAlpha = p.opacity;
-        
-        // Square "pixels"
         ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
       }
-      
-      ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
     };
 
@@ -183,39 +178,32 @@ const App: React.FC = () => {
 
     animationFrameRef.current = requestAnimationFrame(loop);
     return () => {
-      if (animationFrameRef.current !== undefined) cancelAnimationFrame(animationFrameRef.current);
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, []);
+  }, [isReady]);
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    vacuumRef.current = {
-      active: true,
-      x: e.clientX,
-      y: e.clientY
-    };
-  };
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    vacuumRef.current = {
-      active: true,
-      x: e.clientX,
-      y: e.clientY
-    };
-  };
-
-  const handlePointerUp = () => {
-    vacuumRef.current.active = false;
+  const handlePointer = (e: React.PointerEvent) => {
+    if (e.type === 'pointerup' || e.type === 'pointerleave' || e.type === 'pointercancel') {
+      vacuumRef.current.active = false;
+    } else {
+      vacuumRef.current = {
+        active: true,
+        x: e.clientX,
+        y: e.clientY
+      };
+    }
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden select-none bg-slate-900">
+    <div className="relative w-full h-screen overflow-hidden select-none bg-slate-900 touch-none">
       <canvas
         ref={canvasRef}
-        onPointerMove={handlePointerMove}
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
-        className="w-full h-full cursor-none touch-none"
+        onPointerMove={handlePointer}
+        onPointerDown={handlePointer}
+        onPointerUp={handlePointer}
+        onPointerLeave={handlePointer}
+        onPointerCancel={handlePointer}
+        className="w-full h-full cursor-none"
       />
       
       <HUD 
@@ -225,8 +213,7 @@ const App: React.FC = () => {
         onReset={initGame}
       />
       
-      {/* Decorative gradient overlay */}
-      <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-transparent to-slate-900/40" />
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-transparent to-slate-900/20" />
     </div>
   );
 };
