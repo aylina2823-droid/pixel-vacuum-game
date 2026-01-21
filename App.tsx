@@ -66,6 +66,9 @@ const App: React.FC = () => {
     if (tg) {
       tg.ready();
       tg.expand();
+      if (tg.disableVerticalSwiping) {
+        tg.disableVerticalSwiping();
+      }
       if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
     }
     setIsReady(true);
@@ -367,7 +370,7 @@ const App: React.FC = () => {
           const pulse = (Math.sin(Date.now() / 150) + 1) / 2;
           ctx.shadowBlur = 15 + pulse * 15;
           ctx.shadowColor = p.color;
-          drawSize = p.size * 2.5; // Even more visible as requested
+          drawSize = p.size * 2.5;
         } else {
           ctx.shadowBlur = 0;
         }
