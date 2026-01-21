@@ -98,10 +98,10 @@ const App: React.FC = () => {
       colorData = NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
     }
 
-    // Safe spawn: padding 30px
+    // Safe spawn: padding 30px as requested
     const padding = 30;
-    const safeWidth = Math.max(width - padding * 2, 10);
-    const safeHeight = Math.max(height - padding * 2, 10);
+    const safeWidth = Math.max(width - padding * 2, padding);
+    const safeHeight = Math.max(height - padding * 2, padding);
 
     return {
       id,
@@ -169,15 +169,15 @@ const App: React.FC = () => {
       const handleResize = () => {
         const canvas = canvasRef.current;
         if (canvas) {
-          const oldW = canvas.width;
-          const oldH = canvas.height;
           canvas.width = window.innerWidth;
           canvas.height = window.innerHeight;
           
-          // Re-clamp existing pixels to new boundaries if they are out
+          // Immediate safety clamp on resize
           pixelsRef.current.forEach(p => {
-            if (p.x > canvas.width) p.x = canvas.width - 5;
-            if (p.y > canvas.height) p.y = canvas.height - 5;
+            if (p.x < 0) p.x = 10;
+            if (p.x > canvas.width) p.x = canvas.width - 10;
+            if (p.y < 0) p.y = 10;
+            if (p.y > canvas.height) p.y = canvas.height - 10;
           });
         }
       };
@@ -233,7 +233,7 @@ const App: React.FC = () => {
 
     let isTransitioning = false;
 
-    const update = () => {
+    const update = (now: number) => {
       const vacuum = vacuumRef.current;
       const pixels = pixelsRef.current;
       const isTurbo = turboTimeLeft > 0;
@@ -247,21 +247,28 @@ const App: React.FC = () => {
         p.vx *= FRICTION;
         p.vy *= FRICTION;
 
-        // Strict screen boundaries (Clamp and bounce)
-        if (p.x < 0) { 
-          p.x = 0; 
-          p.vx = Math.abs(p.vx); 
-        } else if (p.x > canvas.width) { 
-          p.x = canvas.width; 
-          p.vx = -Math.abs(p.vx); 
-        }
-
-        if (p.y < 0) { 
-          p.y = 0; 
-          p.vy = Math.abs(p.vy); 
-        } else if (p.y > canvas.height) { 
-          p.y = canvas.height; 
-          p.vy = -Math.abs(p.vy); 
+        // Emergency Teleport & Clamp logic
+        const isOutside = p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height;
+        
+        if (isOutside) {
+          if (!p.outsideSince) {
+            p.outsideSince = now;
+          } else if (now - p.outsideSince > 1000) {
+            // Teleport to center if outside for > 1 second
+            p.x = canvas.width / 2 + (Math.random() - 0.5) * 50;
+            p.y = canvas.height / 2 + (Math.random() - 0.5) * 50;
+            p.vx = 0;
+            p.vy = 0;
+            p.outsideSince = undefined;
+          }
+          
+          // Strict clamp for immediate correction
+          if (p.x < 0) { p.x = 0; p.vx = Math.abs(p.vx); }
+          if (p.x > canvas.width) { p.x = canvas.width; p.vx = -Math.abs(p.vx); }
+          if (p.y < 0) { p.y = 0; p.vy = Math.abs(p.vy); }
+          if (p.y > canvas.height) { p.y = canvas.height; p.vy = -Math.abs(p.vy); }
+        } else {
+          p.outsideSince = undefined;
         }
 
         if (vacuum.active) {
@@ -286,7 +293,6 @@ const App: React.FC = () => {
             p.vx += (dx / dist) * force;
             p.vy += (dy / dist) * force;
             
-            // Jitter effect during Turbo
             if (isTurbo) {
               p.x += (Math.random() - 0.5) * 1.5;
               p.y += (Math.random() - 0.5) * 1.5;
@@ -358,11 +364,10 @@ const App: React.FC = () => {
         
         let drawSize = p.size;
         if (isEnding) {
-          // Highlight remaining 5 pixels: pulse glow and 2x size
           const pulse = (Math.sin(Date.now() / 150) + 1) / 2;
-          ctx.shadowBlur = 10 + pulse * 10;
+          ctx.shadowBlur = 15 + pulse * 15;
           ctx.shadowColor = p.color;
-          drawSize = p.size * 2;
+          drawSize = p.size * 2.5; // Even more visible as requested
         } else {
           ctx.shadowBlur = 0;
         }
@@ -373,8 +378,6 @@ const App: React.FC = () => {
           ctx.strokeRect(p.x - drawSize/2, p.y - drawSize/2, drawSize, drawSize);
         }
         ctx.fillRect(p.x - drawSize/2, p.y - drawSize/2, drawSize, drawSize);
-        
-        // Reset shadow for next draws
         ctx.shadowBlur = 0;
       }
 
@@ -408,7 +411,7 @@ const App: React.FC = () => {
 
     const loop = (time: number) => {
       lastTimeRef.current = time;
-      update();
+      update(time);
       draw();
       animationFrameRef.current = requestAnimationFrame(loop);
     };
