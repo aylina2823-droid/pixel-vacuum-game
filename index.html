@@ -3,41 +3,55 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- 1. Meta tag with viewport-fit for full screen immersion -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Pixel Vacuum</title>
+    
+    <!-- 2. Telegram SDK loaded FIRST as required for Android -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Заглушка для совместимости
+      // Global variable setup
       window.process = window.process || { env: {} };
-    </script>
-    <style>
-      :root {
-        --tg-viewport-height: 100vh;
-        --tg-viewport-stable-height: 100vh;
+      
+      // Immediate call to ready() for Android initialization
+      if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
       }
+    </script>
+    
+    <style>
+      /* 3. Aggressive CSS to lock the screen on iOS and Android */
       html, body {
         margin: 0;
         padding: 0;
         width: 100%;
         height: 100%;
         overflow: hidden;
+        position: fixed; /* Critical for iOS to prevent scroll-to-close */
         background-color: #0f172a;
-        /* Disable all default browser touch actions */
-        touch-action: none;
+        touch-action: none; /* Disables browser gestures */
+        overscroll-behavior: none; /* Prevents "rubber-band" effect */
+        -webkit-user-select: none;
+        user-select: none;
         -webkit-tap-highlight-color: transparent;
-        position: fixed;
       }
+
       canvas {
         display: block;
+        width: 100%;
+        height: 100%;
         touch-action: none;
-        user-select: none;
-        -webkit-user-select: none;
       }
+
       #root {
         width: 100%;
         height: 100%;
       }
+
+      /* Error/Debug Overlay */
       #error-boundary {
         display: none;
         position: fixed;
@@ -53,40 +67,56 @@
         font-family: ui-sans-serif, system-ui;
       }
     </style>
+    
     <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react/": "https://esm.sh/react@18.3.1/",
-    "react-dom": "https://esm.sh/react-dom@18.3.1",
-    "react-dom/": "https://esm.sh/react-dom@18.3.1/"
-  }
-}
-</script>
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.3.1",
+        "react/": "https://esm.sh/react@18.3.1/",
+        "react-dom": "https://esm.sh/react-dom@18.3.1",
+        "react-dom/": "https://esm.sh/react-dom@18.3.1/"
+      }
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    
+    <!-- 4. Debug/Error block for troubleshooting -->
     <div id="error-boundary">
-      <h1 class="text-xl font-bold mb-4">Упс! Что-то пошло не так</h1>
-      <pre id="error-message" class="text-xs opacity-70 break-all whitespace-pre-wrap max-w-md"></pre>
-      <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-white text-slate-900 rounded-full font-bold">Перезагрузить</button>
+      <h1 class="text-xl font-bold mb-4">Pixel Vacuum Error</h1>
+      <pre id="error-message" class="text-xs opacity-70 break-all whitespace-pre-wrap max-w-md bg-black/40 p-4 rounded-xl mb-4"></pre>
+      <button onclick="location.reload()" class="px-6 py-2 bg-white text-slate-900 rounded-full font-bold">Restart Game</button>
     </div>
+
     <script type="module" src="/index.tsx"></script>
+    
     <script>
-      // Prevent overscroll/rubber-band effect on iOS and Android
+      // 5. Hard blocking of touch events to prevent Telegram closure swipe
       document.addEventListener('touchmove', function(e) {
-        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'RANGE') {
+        // Only allow touchmove for specific UI elements if needed, otherwise block all
+        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'RANGE') {
            e.preventDefault();
         }
       }, { passive: false });
 
+      // Error catching for the debug block
       window.onerror = function(message, source, lineno, colno, error) {
-        document.getElementById('error-boundary').style.display = 'flex';
-        document.getElementById('error-message').textContent = message + '\n' + (error ? error.stack : '');
+        const overlay = document.getElementById('error-boundary');
+        const msg = document.getElementById('error-message');
+        if (overlay && msg) {
+          overlay.style.display = 'flex';
+          msg.textContent = `${message}\nAt: ${source}:${lineno}:${colno}\n${error ? error.stack : ''}`;
+        }
       };
+      
       window.onunhandledrejection = function(event) {
-        document.getElementById('error-boundary').style.display = 'flex';
-        document.getElementById('error-message').textContent = 'Ошибка: ' + event.reason;
+        const overlay = document.getElementById('error-boundary');
+        const msg = document.getElementById('error-message');
+        if (overlay && msg) {
+          overlay.style.display = 'flex';
+          msg.textContent = 'Unhandled Rejection: ' + (event.reason?.stack || event.reason);
+        }
       };
     </script>
   </body>
