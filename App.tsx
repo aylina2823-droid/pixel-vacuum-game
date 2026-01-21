@@ -3,6 +3,7 @@ import { Pixel, ConfettiParticle, VacuumState, GameState, Upgrades, Announcement
 import { 
   NEON_COLORS, 
   HEAVY_PIXEL_COLOR,
+  GOLD_PIXEL_COLOR,
   BASE_VACUUM_RADIUS, 
   SUCK_RADIUS, 
   BASE_ATTRACTION_FORCE, 
@@ -18,7 +19,7 @@ import {
 } from './constants';
 import HUD from './components/HUD';
 
-const STORAGE_KEY = 'pixel_vacuum_save_v3';
+const STORAGE_KEY = 'pixel_vacuum_save_v4';
 
 const MOTIVATIONAL_PHRASES = [
   "Вау!", "Чистота!", "Мастер порядка!", "Безупречно!", "Ни пылинки!",
@@ -34,7 +35,6 @@ const App: React.FC = () => {
   const [upgrades, setUpgrades] = useState<Upgrades>({ power: 0, size: 0 });
   const [turboCost, setTurboCost] = useState(TURBO_INITIAL_COST);
   const [turboTimeLeft, setTurboTimeLeft] = useState(0);
-  const [manualPower, setManualPower] = useState(1.0);
   const [motivation, setMotivation] = useState("");
   const [totalPixels, setTotalPixels] = useState(INITIAL_PIXEL_COUNT);
   const [flash, setFlash] = useState(false);
@@ -43,12 +43,9 @@ const App: React.FC = () => {
   const pixelsRef = useRef<Pixel[]>([]);
   const confettiRef = useRef<ConfettiParticle[]>([]);
   const vacuumRef = useRef<VacuumState>({ active: false, x: 0, y: 0 });
-  // Fix: animationFrameRef needs an initial value to satisfy TypeScript's useRef definition
   const animationFrameRef = useRef<number | undefined>(undefined);
 
-  // Initialization
   useEffect(() => {
-    // Basic state restoration
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -61,11 +58,9 @@ const App: React.FC = () => {
     } catch (e) {
       console.warn("Save load failed", e);
     }
-    
     setIsReady(true);
   }, []);
 
-  // Persistence
   useEffect(() => {
     if (isReady) {
       const data: GameState = { level, coins, upgrades, turboCost };
@@ -73,7 +68,6 @@ const App: React.FC = () => {
     }
   }, [level, coins, upgrades, turboCost, isReady]);
 
-  // Turbo countdown
   useEffect(() => {
     if (turboTimeLeft > 0) {
       const timer = setInterval(() => {
@@ -84,26 +78,29 @@ const App: React.FC = () => {
   }, [turboTimeLeft]);
 
   const createPixel = (id: number, width: number, height: number, currentLevel: number): Pixel => {
-    const isHeavy = currentLevel >= 10 && Math.random() < 0.2;
-    const colorData = isHeavy 
-      ? { color: HEAVY_PIXEL_COLOR, glow: 'rgba(168, 85, 247, 0.6)' } 
-      : NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
+    const isHeavy = currentLevel >= 5 && Math.random() < 0.15;
+    const isGold = currentLevel >= 10 && Math.random() < 0.1;
+    
+    let colorData = NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
+    if (isGold) colorData = { color: GOLD_PIXEL_COLOR, glow: 'rgba(251, 191, 36, 0.8)' };
+    else if (isHeavy) colorData = { color: HEAVY_PIXEL_COLOR, glow: 'rgba(168, 85, 247, 0.6)' };
 
-    const padding = 40;
-    const safeWidth = Math.max(width - padding * 2, 20);
-    const safeHeight = Math.max(height - padding * 2, 20);
+    const padding = 50;
+    const safeWidth = Math.max(width - padding * 2, 40);
+    const safeHeight = Math.max(height - padding * 2, 40);
 
     return {
       id,
       x: padding + Math.random() * safeWidth,
       y: padding + Math.random() * safeHeight,
-      vx: (Math.random() - 0.5) * 1.5,
-      vy: (Math.random() - 0.5) * 1.5,
-      size: isHeavy ? (Math.random() * 2 + 5) : (Math.random() * 2 + 2),
+      vx: (Math.random() - 0.5) * 1.2,
+      vy: (Math.random() - 0.5) * 1.2,
+      size: isGold ? 4 : (isHeavy ? 6 : (Math.random() * 2 + 2)),
       color: colorData.color,
       glow: colorData.glow,
-      opacity: 0.7 + Math.random() * 0.3,
-      isHeavy
+      opacity: 0.8 + Math.random() * 0.2,
+      isHeavy,
+      isGold
     };
   };
 
@@ -111,15 +108,15 @@ const App: React.FC = () => {
     const particles: ConfettiParticle[] = [];
     for (let i = 0; i < 40; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = Math.random() * 8 + 4;
-      const life = Math.random() * 50 + 30;
+      const speed = Math.random() * 6 + 3;
+      const life = Math.random() * 40 + 20;
       particles.push({
         x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
         color: NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)].color,
-        size: Math.random() * 3 + 2,
+        size: Math.random() * 2 + 2,
         life: life, maxLife: life,
         rotation: Math.random() * Math.PI * 2,
-        rotationSpeed: (Math.random() - 0.5) * 0.15
+        rotationSpeed: (Math.random() - 0.5) * 0.1
       });
     }
     confettiRef.current = [...confettiRef.current, ...particles];
@@ -129,7 +126,10 @@ const App: React.FC = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
-    const count = Math.floor(INITIAL_PIXEL_COUNT * Math.pow(1.15, level - 1));
+    // Balance Level 10+: Mass instead of count
+    const pixelMultiplier = level > 10 ? Math.pow(1.15, 9) : Math.pow(1.15, level - 1);
+    const count = Math.floor(INITIAL_PIXEL_COUNT * pixelMultiplier);
+    
     const width = canvas.width;
     const height = canvas.height;
 
@@ -144,9 +144,9 @@ const App: React.FC = () => {
     pixelsRef.current = newPixels;
     setScore(0);
     setTotalPixels(count);
-    setMotivation(level === 10 ? "Тяжелые пиксели!" : `Уровень ${level}`);
+    setMotivation(level >= 10 ? "Gold pixels appeared!" : `Level ${level}`);
     setFlash(true);
-    setTimeout(() => setFlash(false), 200);
+    setTimeout(() => setFlash(false), 150);
   }, [level]);
 
   useEffect(() => {
@@ -156,13 +156,6 @@ const App: React.FC = () => {
         if (canvas) {
           canvas.width = window.innerWidth;
           canvas.height = window.innerHeight;
-          // Reposition if somehow lost
-          pixelsRef.current.forEach(p => {
-            if (p.x < 0) p.x = 20;
-            if (p.x > canvas.width) p.x = canvas.width - 20;
-            if (p.y < 0) p.y = 20;
-            if (p.y > canvas.height) p.y = canvas.height - 20;
-          });
         }
       };
       window.addEventListener('resize', handleResize);
@@ -172,10 +165,17 @@ const App: React.FC = () => {
     }
   }, [isReady, spawnLevel]);
 
+  // Updated Price Formula: base * (1.6 ^ level)
   const powerCost = Math.floor(UPGRADE_BASE_COST * Math.pow(UPGRADE_COST_MULTIPLIER, upgrades.power));
   const sizeCost = Math.floor(UPGRADE_BASE_COST * Math.pow(UPGRADE_COST_MULTIPLIER, upgrades.size));
-  const getVacuumRadius = () => BASE_VACUUM_RADIUS + (upgrades.size * 15);
-  const isSizeMaxed = canvasRef.current ? (getVacuumRadius() >= canvasRef.current.width * MAX_SIZE_SCREEN_RATIO) : false;
+  
+  const getVacuumRadius = () => {
+    const base = BASE_VACUUM_RADIUS + (upgrades.size * 12);
+    const max = window.innerWidth * MAX_SIZE_SCREEN_RATIO;
+    return Math.min(base, max);
+  };
+
+  const isSizeMaxed = canvasRef.current ? (getVacuumRadius() >= window.innerWidth * MAX_SIZE_SCREEN_RATIO) : false;
 
   const handleUpgradePower = () => {
     if (coins >= powerCost) {
@@ -196,7 +196,7 @@ const App: React.FC = () => {
       setCoins(c => c - turboCost);
       setTurboCost(prev => prev + TURBO_COST_STEP);
       setTurboTimeLeft(TURBO_DURATION_MS / 1000);
-      setMotivation("⚡️ TURBO ⚡️");
+      setMotivation("⚡️ HYPER SUCK ⚡️");
       const tg = (window as any).Telegram?.WebApp;
       if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     }
@@ -217,15 +217,15 @@ const App: React.FC = () => {
       const vacuum = vacuumRef.current;
       const isTurbo = turboTimeLeft > 0;
       
-      // Update
       const nextPixels: Pixel[] = [];
-      let suckedCount = 0;
+      let suckedCoins = 0;
+      let suckedScore = 0;
+
       for (let i = 0; i < pixelsRef.current.length; i++) {
         const p = pixelsRef.current[i];
         p.x += p.vx; p.y += p.vy;
         p.vx *= FRICTION; p.vy *= FRICTION;
 
-        // Teleport check for invisible pixels
         const outside = p.x < 0 || p.x > width || p.y < 0 || p.y > height;
         if (outside) {
           if (!p.outsideSince) p.outsideSince = time;
@@ -234,7 +234,6 @@ const App: React.FC = () => {
             p.vx = 0; p.vy = 0;
             p.outsideSince = undefined;
           }
-          // Immediate wall bounce
           if (p.x < 0) { p.x = 0; p.vx = Math.abs(p.vx); }
           if (p.x > width) { p.x = width; p.vx = -Math.abs(p.vx); }
           if (p.y < 0) { p.y = 0; p.vy = Math.abs(p.vy); }
@@ -251,11 +250,15 @@ const App: React.FC = () => {
           const rad = getVacuumRadius();
           
           if (dist < SUCK_RADIUS) {
-            suckedCount++;
+            suckedScore++;
+            suckedCoins += p.isGold ? 5 : 1;
             continue;
           } else if (dist < rad) {
-            const power = (BASE_ATTRACTION_FORCE + upgrades.power * 0.3) * manualPower * (isTurbo ? TURBO_MULTIPLIER : 1);
-            const force = (1 - dist / rad) * power * (p.isHeavy ? 0.4 : 1);
+            // Level 10+ Mass Increase
+            const massFactor = level > 10 ? (1 + (level - 10) * 0.05) : 1;
+            const power = (BASE_ATTRACTION_FORCE + upgrades.power * 0.3) * (isTurbo ? TURBO_MULTIPLIER : 1);
+            const pullStrength = (p.isGold ? 0.7 : (p.isHeavy ? 0.4 : 1)) / massFactor;
+            const force = (1 - dist / rad) * power * pullStrength;
             p.vx += (dx / dist) * force;
             p.vy += (dy / dist) * force;
           }
@@ -272,9 +275,9 @@ const App: React.FC = () => {
       }
       confettiRef.current = nextConfetti;
 
-      if (suckedCount > 0) {
-        setScore(s => s + suckedCount);
-        setCoins(c => c + suckedCount);
+      if (suckedScore > 0) {
+        setScore(s => s + suckedScore);
+        setCoins(c => c + suckedCoins);
         const tg = (window as any).Telegram?.WebApp;
         if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
       }
@@ -284,8 +287,7 @@ const App: React.FC = () => {
         setLevel(l => l + 1);
       }
 
-      // Draw
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = '#020617';
       ctx.fillRect(0, 0, width, height);
 
       for (const c of confettiRef.current) {
@@ -300,20 +302,25 @@ const App: React.FC = () => {
         ctx.fillStyle = p.color;
         let sz = p.size;
         if (isEnd) {
-          ctx.shadowBlur = 10; ctx.shadowColor = p.color;
-          sz *= 2;
+          ctx.shadowBlur = 12; ctx.shadowColor = p.color;
+          sz *= 1.8;
+        }
+        if (p.isGold) {
+            ctx.shadowBlur = 8; ctx.shadowColor = GOLD_PIXEL_COLOR;
         }
         ctx.fillRect(p.x - sz/2, p.y - sz/2, sz, sz);
         ctx.shadowBlur = 0;
       }
 
       if (vacuum.active) {
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = 0.8;
         ctx.beginPath();
         ctx.arc(vacuum.x, vacuum.y, getVacuumRadius(), 0, Math.PI * 2);
-        ctx.strokeStyle = isTurbo ? '#f97316' : 'rgba(255,255,255,0.1)';
-        ctx.lineWidth = isTurbo ? 3 : 1;
+        ctx.strokeStyle = isTurbo ? '#f97316' : 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = isTurbo ? 4 : 2;
+        if (isTurbo) { ctx.shadowBlur = 15; ctx.shadowColor = '#f97316'; }
         ctx.stroke();
+        ctx.shadowBlur = 0;
       }
       ctx.globalAlpha = 1;
 
@@ -322,33 +329,40 @@ const App: React.FC = () => {
 
     animationFrameRef.current = requestAnimationFrame(gameLoop);
     return () => { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); };
-  }, [isReady, upgrades, manualPower, level, turboTimeLeft]);
+  }, [isReady, upgrades, level, turboTimeLeft]);
 
   const handlePointer = (e: React.PointerEvent) => {
     if (e.type === 'pointerup' || e.type === 'pointerleave' || e.type === 'pointercancel') {
       vacuumRef.current.active = false;
     } else {
+      // Avoid tracking if it was caught by UI (handled by stopPropagation in HUD)
       vacuumRef.current = { active: true, x: e.clientX, y: e.clientY };
     }
   };
 
   return (
-    <div className={`relative w-full h-full overflow-hidden transition-colors ${flash ? 'bg-cyan-950' : 'bg-slate-950'}`}>
-      <canvas ref={canvasRef} onPointerDown={handlePointer} onPointerMove={handlePointer} onPointerUp={handlePointer} onPointerLeave={handlePointer} />
+    <div className={`relative w-full h-full overflow-hidden transition-colors duration-500 ${flash ? 'bg-cyan-900/20' : 'bg-slate-950'}`}>
+      <canvas 
+        ref={canvasRef} 
+        onPointerDown={handlePointer} 
+        onPointerMove={handlePointer} 
+        onPointerUp={handlePointer} 
+        onPointerLeave={handlePointer} 
+      />
       
       {announcement.show && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
-          <h2 className="text-6xl font-black text-white italic uppercase animate-pulse">Level {announcement.level}</h2>
+          <h2 className="text-7xl font-black text-white italic uppercase tracking-tighter opacity-80 scale-110">Level {announcement.level}</h2>
         </div>
       )}
 
       <HUD 
         score={score} total={totalPixels} coins={coins} level={level} message={motivation}
         powerUpgradeCost={powerCost} sizeUpgradeCost={sizeCost} turboCost={turboCost}
-        turboTimeLeft={turboTimeLeft} manualPower={manualPower}
+        turboTimeLeft={turboTimeLeft}
         onUpgradePower={handleUpgradePower} onUpgradeSize={handleUpgradeSize}
-        onActivateTurbo={handleActivateTurbo} onManualPowerChange={setManualPower}
-        onForceReset={spawnLevel} isSizeMaxed={isSizeMaxed}
+        onActivateTurbo={handleActivateTurbo}
+        isSizeMaxed={isSizeMaxed}
       />
     </div>
   );
