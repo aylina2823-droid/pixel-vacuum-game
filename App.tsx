@@ -19,7 +19,7 @@ import {
 } from './constants';
 import HUD from './components/HUD';
 
-const STORAGE_KEY = 'pixel_vacuum_save_v1';
+const STORAGE_KEY = 'pixel_vacuum_save_v2'; // Bumped version for fresh state
 
 const MOTIVATIONAL_PHRASES = [
   "Вау!", "Чистота!", "Мастер порядка!", "Безупречно!", "Ни пылинки!",
@@ -47,8 +47,21 @@ const App: React.FC = () => {
   const animationFrameRef = useRef<number>(undefined);
   const lastTimeRef = useRef<number>(performance.now());
 
-  // Persistence: Load
+  // Initialization & Persistence
   useEffect(() => {
+    // 1. Telegram WebApp Ready
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      if (tg.disableVerticalSwiping) {
+        tg.disableVerticalSwiping();
+      }
+      if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
+      if (tg.enableClosingConfirmation) tg.enableClosingConfirmation();
+    }
+
+    // 2. Load Save
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
@@ -62,19 +75,10 @@ const App: React.FC = () => {
       }
     }
 
-    const tg = (window as any).Telegram?.WebApp;
-    if (tg) {
-      tg.ready();
-      tg.expand();
-      if (tg.disableVerticalSwiping) {
-        tg.disableVerticalSwiping();
-      }
-      if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
-    }
     setIsReady(true);
   }, []);
 
-  // Persistence: Save
+  // Save loop
   useEffect(() => {
     if (isReady) {
       const data: GameState = { level, coins, upgrades, turboCost };
@@ -82,7 +86,7 @@ const App: React.FC = () => {
     }
   }, [level, coins, upgrades, turboCost, isReady]);
 
-  // Turbo Countdown Effect
+  // Turbo Countdown
   useEffect(() => {
     if (turboTimeLeft > 0) {
       const timer = setInterval(() => {
@@ -101,10 +105,9 @@ const App: React.FC = () => {
       colorData = NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
     }
 
-    // Safe spawn: padding 30px as requested
     const padding = 30;
-    const safeWidth = Math.max(width - padding * 2, padding);
-    const safeHeight = Math.max(height - padding * 2, padding);
+    const safeWidth = Math.max(width - padding * 2, 20);
+    const safeHeight = Math.max(height - padding * 2, 20);
 
     return {
       id,
@@ -175,7 +178,6 @@ const App: React.FC = () => {
           canvas.width = window.innerWidth;
           canvas.height = window.innerHeight;
           
-          // Immediate safety clamp on resize
           pixelsRef.current.forEach(p => {
             if (p.x < 0) p.x = 10;
             if (p.x > canvas.width) p.x = canvas.width - 10;
@@ -250,14 +252,12 @@ const App: React.FC = () => {
         p.vx *= FRICTION;
         p.vy *= FRICTION;
 
-        // Emergency Teleport & Clamp logic
         const isOutside = p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height;
         
         if (isOutside) {
           if (!p.outsideSince) {
             p.outsideSince = now;
           } else if (now - p.outsideSince > 1000) {
-            // Teleport to center if outside for > 1 second
             p.x = canvas.width / 2 + (Math.random() - 0.5) * 50;
             p.y = canvas.height / 2 + (Math.random() - 0.5) * 50;
             p.vx = 0;
@@ -265,7 +265,6 @@ const App: React.FC = () => {
             p.outsideSince = undefined;
           }
           
-          // Strict clamp for immediate correction
           if (p.x < 0) { p.x = 0; p.vx = Math.abs(p.vx); }
           if (p.x > canvas.width) { p.x = canvas.width; p.vx = -Math.abs(p.vx); }
           if (p.y < 0) { p.y = 0; p.vy = Math.abs(p.vy); }
@@ -346,7 +345,6 @@ const App: React.FC = () => {
       const isTurbo = turboTimeLeft > 0;
       const currentRadius = getVacuumRadius();
 
-      // Confetti
       for (let i = 0; i < confetti.length; i++) {
         const c = confetti[i];
         ctx.globalAlpha = c.life / c.maxLife;
@@ -358,7 +356,6 @@ const App: React.FC = () => {
         ctx.restore();
       }
 
-      // Pixels
       const isEnding = pixels.length <= 5;
       for (let i = 0; i < pixels.length; i++) {
         const p = pixels[i];
@@ -384,7 +381,6 @@ const App: React.FC = () => {
         ctx.shadowBlur = 0;
       }
 
-      // Vacuum
       if (vacuum.active) {
         ctx.globalAlpha = 1;
         ctx.beginPath();
@@ -424,6 +420,7 @@ const App: React.FC = () => {
   }, [isReady, manualPower, upgrades, level, turboTimeLeft]);
 
   const handlePointer = (e: React.PointerEvent) => {
+    // 6. Handle pointer events but prevent default browser behavior
     if (e.type === 'pointerup' || e.type === 'pointerleave' || e.type === 'pointercancel') {
       vacuumRef.current.active = false;
     } else {
@@ -443,7 +440,6 @@ const App: React.FC = () => {
         className="w-full h-full cursor-none"
       />
       
-      {/* Level Announcement */}
       {announcement.show && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
           <h2 className="text-7xl font-black text-white italic tracking-tighter uppercase drop-shadow-[0_0_30px_rgba(255,255,255,0.7)] animate-in fade-in zoom-in slide-in-from-bottom-12 duration-700">
