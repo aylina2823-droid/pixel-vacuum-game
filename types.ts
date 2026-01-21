@@ -10,6 +10,7 @@ export interface Pixel {
   opacity: number;
   glow: string;
   isHeavy?: boolean;
+  outsideSince?: number; // Timestamp when pixel first went out of bounds
 }
 
 export interface ConfettiParticle {
