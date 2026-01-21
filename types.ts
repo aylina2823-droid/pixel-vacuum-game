@@ -1,4 +1,3 @@
-
 export interface Pixel {
   id: number;
   x: number;
@@ -10,7 +9,8 @@ export interface Pixel {
   opacity: number;
   glow: string;
   isHeavy?: boolean;
-  outsideSince?: number; // Timestamp when pixel first went out of bounds
+  isGold?: boolean;
+  outsideSince?: number;
 }
 
 export interface ConfettiParticle {
