@@ -10,7 +10,21 @@ import {
   INITIAL_PIXEL_COUNT 
 } from './constants';
 import HUD from './components/HUD';
-import { getCleanupMessage } from './services/geminiService';
+
+const MOTIVATIONAL_PHRASES = [
+  "Вау!",
+  "Чистота!",
+  "Мастер порядка!",
+  "Пылесос уровень: Про",
+  "Безупречно!",
+  "Ни пылинки!",
+  "Сила всасывания 100%",
+  "Блестящий результат!",
+  "Так держать!",
+  "Скоро будет чисто!",
+  "Уборка — это весело!",
+  "Порядок во всём!"
+];
 
 const App: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -76,11 +90,11 @@ const App: React.FC = () => {
     }
   }, [isReady, initGame]);
 
+  // Локальная логика фраз
   useEffect(() => {
     if (score > 0 && score % 25 === 0) {
-      getCleanupMessage(score).then(msg => {
-        if (msg) setMotivation(msg);
-      }).catch(() => setMotivation("Отличная работа!"));
+      const randomPhrase = MOTIVATIONAL_PHRASES[Math.floor(Math.random() * MOTIVATIONAL_PHRASES.length)];
+      setMotivation(randomPhrase);
     }
     if (score === totalPixels && totalPixels > 0) {
       setMotivation("Идеальная чистота!");
@@ -125,7 +139,7 @@ const App: React.FC = () => {
             suckedCount++;
             continue;
           } else if (dist < VACUUM_RADIUS) {
-            // Усиленная всасывающая сила
+            // Всасывание (сила регулируется константой ATTRACTION_FORCE)
             const force = (1 - dist / VACUUM_RADIUS) * ATTRACTION_FORCE;
             p.vx += (dx / dist) * force;
             p.vy += (dy / dist) * force;
@@ -160,7 +174,7 @@ const App: React.FC = () => {
         ctx.stroke();
       }
 
-      // Отрисовка пикселей (без тяжелых теней для производительности)
+      // Отрисовка пикселей
       for (let i = 0; i < pixels.length; i++) {
         const p = pixels[i];
         ctx.fillStyle = p.color;
