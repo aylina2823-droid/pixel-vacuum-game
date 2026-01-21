@@ -5,43 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Pixel Vacuum</title>
     
-    <!-- 1. DEBUG ALERT: Catch errors before anything else runs -->
     <script>
+      // Quiet error logging instead of disruptive alerts
       window.onerror = function(msg, url, line, col, error) {
-        var extra = error ? "\nStack: " + error.stack : "";
-        alert("Error: " + msg + "\nLine: " + line + "\nCol: " + col + extra);
+        console.error("Game Error: " + msg + " at " + line + ":" + col);
         return false;
       };
       window.onunhandledrejection = function(event) {
-        alert("Unhandled Rejection: " + (event.reason ? (event.reason.stack || event.reason) : "unknown"));
+        console.error("Unhandled Promise: ", event.reason);
       };
     </script>
 
-    <!-- 2. Telegram SDK loaded FIRST with crossorigin -->
     <script src="https://telegram.org/js/telegram-web-app.js" crossorigin="anonymous"></script>
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       window.process = { env: {} };
-      
-      // 3. Android-safe initialization
       window.onload = function() {
         if (window.Telegram && window.Telegram.WebApp) {
-          try {
-            window.Telegram.WebApp.ready();
-            window.Telegram.WebApp.expand();
-            if (window.Telegram.WebApp.disableVerticalSwiping) {
-              window.Telegram.WebApp.disableVerticalSwiping();
-            }
-          } catch (e) {
-            console.error("TG Init error", e);
-          }
+          window.Telegram.WebApp.ready();
+          window.Telegram.WebApp.expand();
         }
       };
     </script>
     
     <style>
-      /* 4. Aggressive screen locking for iOS/Android */
       html, body {
         margin: 0;
         padding: 0;
@@ -49,45 +36,37 @@
         height: 100%;
         overflow: hidden !important;
         position: fixed;
-        background-color: #0f172a;
+        background-color: #020617;
         touch-action: none;
         overscroll-behavior: none;
         -webkit-user-select: none;
         user-select: none;
         -webkit-tap-highlight-color: transparent;
       }
-
-      #root {
-        width: 100%;
-        height: 100%;
-        position: relative;
-      }
-
-      canvas {
-        display: block;
-        width: 100%;
-        height: 100%;
-        touch-action: none;
-      }
+      #root { width: 100%; height: 100%; }
+      canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+      
+      /* Smooth UI fade */
+      .ui-fade-enter { opacity: 0; transform: scale(0.95); }
+      .ui-fade-enter-active { opacity: 1; transform: scale(1); transition: all 300ms; }
+      .ui-fade-exit { opacity: 1; transform: scale(1); }
+      .ui-fade-exit-active { opacity: 0; transform: scale(0.95); transition: all 300ms; }
     </style>
     
-    <!-- Using standard module imports instead of importmap for broader compatibility -->
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react/": "https://esm.sh/react@^19.2.3/"
-  }
-}
-</script>
-</head>
+    <script type="importmap">
+    {
+      "imports": {
+        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+        "react": "https://esm.sh/react@^19.2.3",
+        "react/": "https://esm.sh/react@^19.2.3/"
+      }
+    }
+    </script>
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
-    
     <script>
-      // 5. Total swipe-to-close prevention
       document.addEventListener('touchmove', function(e) {
         if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'RANGE') {
            e.preventDefault();
